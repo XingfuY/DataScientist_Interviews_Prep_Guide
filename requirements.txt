@@ -1,0 +1,22 @@
+# Core scientific computing
+numpy>=1.26
+pandas>=2.2
+scipy>=1.13
+statsmodels>=0.14
+scikit-learn>=1.5
+
+# Visualization
+matplotlib>=3.9
+seaborn>=0.13
+plotly>=5.22
+
+# Graph analysis
+networkx>=3.3
+
+# Jupyter
+jupyter>=1.0
+ipykernel>=6.29
+ipywidgets>=8.1
+
+# Utilities
+tqdm>=4.66
