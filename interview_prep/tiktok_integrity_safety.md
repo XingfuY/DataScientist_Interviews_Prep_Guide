@@ -2,8 +2,45 @@
 
 **Target Role**: Data Scientist, Integrity & Safety
 **Company**: TikTok (ByteDance)
-**Interview Format**: 3 rounds — SQL, Tech Lead (Stats/ML/Product), Hiring Manager (Resume Deep-Dive + Open-Ended)
+**Interview Format**: 4 rounds — Peer (SQL/Python/Stats), HM (Cases/Open-Ended), Skip-Level Manager (Exploration/Business), HRBP (Behavioral)
 **Key Lesson from Prior Attempt**: The HM wants technical depth and quantitative rigor. Every answer must demonstrate specific methods, numbers, and reasoning. Collaboration stories without technical substance will not pass.
+**Critical Emphasis**: Product sense is confirmed as very important by TikTok insider + recruiter. Every technical answer must connect to product impact, user experience, and business outcomes.
+
+**Companion Documents**:
+- `statistical_foundations.md` — 16-topic statistical foundations tutorial
+- `applied_ds_tutorial.md` — Applied DS with dashboarding focus
+- `product_sense.md` — Product sense framework & 6 worked cases
+- `talk_tracking.md` — Experience bridge & round-by-round talking points
+- `skip_level_prep.md` — Skip-level & business understanding prep
+
+---
+
+## Section 0: Interview Structure Overview
+
+### 0.1 Four-Round Format
+
+| Round | Interviewer | Duration | What They Evaluate |
+|-------|------------|----------|-------------------|
+| **Round 1: Peer** | Senior DS on team | 60 min | SQL proficiency, Python live coding, statistical foundations, data collection methodology, dashboarding knowledge |
+| **Round 2: HM** | Hiring Manager | 60 min | Case analysis (product sense + quantitative rigor), open-ended problem structuring, evaluation plan design, metric monitoring & anomaly attribution |
+| **Round 3: Skip-Level** | Department Head (often Beijing-based) | 45-60 min | Exploration/opportunity identification, statistical methods in business problems, data efficiency, business understanding of Douyin/TikTok/LIVE |
+| **Round 4: HRBP** | HR Business Partner | 30-45 min | Culture fit, growth mindset, ByteDance values alignment, collaboration & communication style |
+
+### 0.2 Lessons from Prior Attempt
+
+The previous interview (e-commerce DS, tech lead level) had 3 rounds and resulted in rejection at the HM stage. Key learnings:
+
+1. **HM does NOT want collaboration stories.** When describing a large cross-team project to demonstrate leadership, the HM interrupted: "I don't want to hear about collaboration — what technical improvements did you make?" Every answer must lead with methodology, not process.
+
+2. **Open-ended questions require structured decomposition.** The question "evaluate the effectiveness of content throttling on bad sellers" requires an immediate causal identification framework (DID/RDD/IV), not a vague discussion of stakeholder alignment.
+
+3. **Product sense matters.** The HM asked about ranking down bad sellers and identifying bad sellers — both require connecting data science to product decisions. "Here's the analysis" is insufficient; "here's the analysis, here's what it means for the product, and here's the recommended action with quantified tradeoffs" is what passes.
+
+4. **The skip-level (department head) evaluates strategic thinking.** This round tests whether you can independently identify opportunities, understand the business context, and connect statistical methods to business outcomes.
+
+5. **Prepare for each round differently.** Round 1 is execution speed (can you write SQL/Python on the spot?). Round 2 is analytical depth (can you independently decompose and solve complex problems?). Round 3 is strategic breadth (do you understand the business and can you identify leverage points?). Round 4 is culture fit (will you thrive at ByteDance?).
+
+→ See `talk_tracking.md` for round-by-round preparation strategy.
 
 ---
 
@@ -1106,9 +1143,261 @@ GROUP BY group_col;
 
 ---
 
-## Section 3: Statistics & ML
+## Section 3: Python Live Coding
 
-### 3.1 Hypothesis Testing
+Round 1 includes Python live coding. Expect problems involving pandas data manipulation, statistical computations, and algorithmic thinking for DS workflows. Practice writing clean, efficient code under time pressure.
+
+### 3.1 Pandas Data Manipulation Patterns
+
+**Pattern 1: Groupby-Aggregate-Filter**
+
+```python
+import pandas as pd
+import numpy as np
+
+# Compute violation rate by region, filter to regions with >1000 content items
+def violation_rate_by_region(df: pd.DataFrame) -> pd.DataFrame:
+    """df has columns: content_id, region, is_violated (bool)"""
+    result = (
+        df.groupby('region')
+        .agg(
+            total=('content_id', 'count'),
+            violations=('is_violated', 'sum')
+        )
+        .assign(violation_rate=lambda x: x['violations'] / x['total'])
+        .query('total > 1000')
+        .sort_values('violation_rate', ascending=False)
+    )
+    return result
+```
+
+**Pattern 2: Window Operations (Rolling, Expanding, Shift)**
+
+```python
+def rolling_violation_rate(df: pd.DataFrame, window: int = 7) -> pd.DataFrame:
+    """Compute 7-day rolling violation rate from daily data.
+    df has columns: date, total_content, violations"""
+    daily = df.sort_values('date').set_index('date')
+    daily['rolling_violations'] = daily['violations'].rolling(window).sum()
+    daily['rolling_total'] = daily['total_content'].rolling(window).sum()
+    daily['rolling_vvr'] = daily['rolling_violations'] / daily['rolling_total']
+    return daily.reset_index()
+
+def week_over_week_change(df: pd.DataFrame) -> pd.DataFrame:
+    """Compute WoW change in daily metrics.
+    df has columns: date, metric_value"""
+    df = df.sort_values('date')
+    df['prev_week'] = df['metric_value'].shift(7)
+    df['wow_change'] = (df['metric_value'] - df['prev_week']) / df['prev_week']
+    return df
+```
+
+**Pattern 3: Merge + Conditional Logic**
+
+```python
+def false_positive_rate(removals: pd.DataFrame, appeals: pd.DataFrame) -> pd.DataFrame:
+    """Compute FPR by moderator type.
+    removals: content_id, moderator_type, action='remove'
+    appeals: content_id, action='reinstate'"""
+    merged = removals.merge(
+        appeals[['content_id']].assign(reinstated=True),
+        on='content_id',
+        how='left'
+    )
+    merged['reinstated'] = merged['reinstated'].fillna(False)
+    fpr = (
+        merged.groupby('moderator_type')
+        .agg(
+            total_removals=('content_id', 'count'),
+            reinstated=('reinstated', 'sum')
+        )
+        .assign(fpr=lambda x: x['reinstated'] / x['total_removals'])
+    )
+    return fpr
+```
+
+### 3.2 Statistical Computations from Scratch
+
+**Two-sample z-test for proportions:**
+
+```python
+def two_sample_proportion_test(n1: int, p1: float, n2: int, p2: float) -> dict:
+    """Test H0: p1 = p2 vs H1: p1 != p2"""
+    p_pool = (n1 * p1 + n2 * p2) / (n1 + n2)
+    se = np.sqrt(p_pool * (1 - p_pool) * (1/n1 + 1/n2))
+    z = (p1 - p2) / se
+    from scipy import stats
+    p_value = 2 * (1 - stats.norm.cdf(abs(z)))
+    ci_diff = (p1 - p2) - 1.96 * se, (p1 - p2) + 1.96 * se
+    return {'z': z, 'p_value': p_value, 'ci_95': ci_diff, 'effect': p1 - p2}
+```
+
+**Power analysis for proportions:**
+
+```python
+def sample_size_proportions(p_control: float, mde: float,
+                            alpha: float = 0.05, power: float = 0.80) -> int:
+    """Minimum sample size per arm for two-sample proportion test."""
+    from scipy.stats import norm
+    p_treatment = p_control + mde
+    z_alpha = norm.ppf(1 - alpha / 2)
+    z_beta = norm.ppf(power)
+    numerator = (z_alpha + z_beta) ** 2 * (
+        p_control * (1 - p_control) + p_treatment * (1 - p_treatment)
+    )
+    denominator = mde ** 2
+    return int(np.ceil(numerator / denominator))
+```
+
+**Bootstrap confidence interval:**
+
+```python
+def bootstrap_ci(data: np.ndarray, stat_func=np.mean,
+                 n_boot: int = 10000, ci: float = 0.95) -> tuple:
+    """Non-parametric bootstrap CI."""
+    rng = np.random.default_rng(42)
+    boot_stats = np.array([
+        stat_func(rng.choice(data, size=len(data), replace=True))
+        for _ in range(n_boot)
+    ])
+    alpha = (1 - ci) / 2
+    return np.percentile(boot_stats, [100 * alpha, 100 * (1 - alpha)])
+```
+
+**CUPED variance reduction:**
+
+```python
+def cuped_adjusted(y_post: np.ndarray, y_pre: np.ndarray) -> np.ndarray:
+    """CUPED: reduce variance using pre-experiment covariate."""
+    theta = np.cov(y_post, y_pre)[0, 1] / np.var(y_pre)
+    y_adjusted = y_post - theta * (y_pre - np.mean(y_pre))
+    variance_reduction = 1 - np.corrcoef(y_post, y_pre)[0, 1] ** 2
+    print(f"Variance reduction: {variance_reduction:.1%}")
+    return y_adjusted
+```
+
+### 3.3 Data Pipeline Patterns
+
+**Cleaning and validation:**
+
+```python
+def validate_content_data(df: pd.DataFrame) -> pd.DataFrame:
+    """Standard cleaning pipeline for content moderation data."""
+    initial_rows = len(df)
+    # Remove duplicates
+    df = df.drop_duplicates(subset='content_id')
+    # Validate types
+    df['created_at'] = pd.to_datetime(df['created_at'], errors='coerce')
+    df = df.dropna(subset=['created_at', 'content_id'])
+    # Validate ranges
+    df = df[df['view_count'] >= 0]
+    df = df[df['created_at'] <= pd.Timestamp.now()]
+    print(f"Dropped {initial_rows - len(df)} rows ({(initial_rows - len(df))/initial_rows:.1%})")
+    return df
+```
+
+**Feature engineering for safety classifier:**
+
+```python
+def engineer_creator_features(content_df: pd.DataFrame,
+                               violations_df: pd.DataFrame) -> pd.DataFrame:
+    """Build creator-level features for risk scoring."""
+    # Posting behavior
+    posting = content_df.groupby('creator_id').agg(
+        total_posts=('content_id', 'count'),
+        days_active=('created_at', lambda x: (x.max() - x.min()).days + 1),
+        content_type_entropy=('content_type', lambda x: -sum(
+            (v := x.value_counts(normalize=True)) * np.log2(v + 1e-10)
+        )),
+    )
+    posting['posting_frequency'] = posting['total_posts'] / posting['days_active'].clip(lower=1)
+
+    # Violation history
+    violation_feats = violations_df.groupby('user_id').agg(
+        total_violations=('violation_date', 'count'),
+        violation_categories=('violation_category', 'nunique'),
+        days_since_last=('violation_date', lambda x: (pd.Timestamp.now().date() - x.max()).days),
+    )
+
+    features = posting.join(violation_feats, how='left').fillna(0)
+    return features
+```
+
+### 3.4 Algorithmic Coding for DS
+
+**Sessionization:**
+
+```python
+def sessionize_events(events: pd.DataFrame, gap_minutes: int = 5) -> pd.DataFrame:
+    """Group user events into sessions based on time gap.
+    events: user_id, timestamp"""
+    events = events.sort_values(['user_id', 'timestamp'])
+    time_diff = events.groupby('user_id')['timestamp'].diff()
+    events['new_session'] = (time_diff > pd.Timedelta(minutes=gap_minutes)).astype(int)
+    events['new_session'] = events['new_session'].fillna(1).astype(int)
+    events['session_id'] = events.groupby('user_id')['new_session'].cumsum()
+    return events
+```
+
+**Anomaly detection (z-score on rolling window):**
+
+```python
+def detect_anomalies(ts: pd.Series, window: int = 30,
+                     threshold: float = 3.0) -> pd.Series:
+    """Flag anomalies using rolling z-score."""
+    rolling_mean = ts.rolling(window, min_periods=7).mean()
+    rolling_std = ts.rolling(window, min_periods=7).std()
+    z_scores = (ts - rolling_mean) / rolling_std.clip(lower=1e-10)
+    return z_scores.abs() > threshold
+```
+
+**Metric decomposition (additive):**
+
+```python
+def decompose_metric_change(before: pd.DataFrame, after: pd.DataFrame,
+                            group_col: str, num_col: str, denom_col: str) -> pd.DataFrame:
+    """Decompose rate metric change into mix effect vs rate effect.
+    Rate = sum(num) / sum(denom), computed per group."""
+    b = before.groupby(group_col).agg(num=(num_col, 'sum'), denom=(denom_col, 'sum'))
+    a = after.groupby(group_col).agg(num=(num_col, 'sum'), denom=(denom_col, 'sum'))
+    b['rate'] = b['num'] / b['denom']
+    a['rate'] = a['num'] / a['denom']
+    b['mix'] = b['denom'] / b['denom'].sum()
+    a['mix'] = a['denom'] / a['denom'].sum()
+    # Mix effect: rate stays, mix changes
+    mix_effect = (a['mix'] * b['rate']).sum() - (b['mix'] * b['rate']).sum()
+    # Rate effect: mix stays, rate changes
+    rate_effect = (b['mix'] * a['rate']).sum() - (b['mix'] * b['rate']).sum()
+    # Interaction
+    interaction = (a['rate'] - b['rate']).mul(a['mix'] - b['mix']).sum()
+    return pd.DataFrame({
+        'component': ['mix_effect', 'rate_effect', 'interaction', 'total'],
+        'value': [mix_effect, rate_effect, interaction, mix_effect + rate_effect + interaction]
+    })
+```
+
+### 3.5 Live Coding Tips
+
+1. **Clarify before coding.** Ask about input format, edge cases, expected output. "Should I handle NaN values? What timezone are timestamps in?"
+2. **Narrate your approach.** "I'll first group by region, then compute the rate, then filter." The interviewer evaluates your thinking process, not just the code.
+3. **Use pandas idioms.** Chain operations with `.assign()`, `.query()`, `.pipe()`. Avoid explicit loops over rows.
+4. **Start simple, then optimize.** Get a working solution first, then discuss efficiency improvements.
+5. **Test with edge cases.** "What happens if a group has zero denominator? I'll add `.clip(lower=1)` or `np.where`."
+6. **Know complexity.** GroupBy is O(n), merge is O(n+m) for hash join. Rolling window is O(n*w) naive but pandas optimizes to O(n).
+
+→ See `applied_ds_tutorial.md` for extended coding examples with dashboarding.
+
+---
+
+## Section 4: Statistical Foundations
+
+This section provides a summary overview. For the complete 16-topic deep-dive with theory, intuition, TikTok use cases, and Python code snippets, see **`statistical_foundations.md`**.
+
+### 4.1 Core Statistical Concepts (Quick Reference)
+
+**Topics covered in `statistical_foundations.md`**: P-values & CIs, Common Distributions, CLT, Law of Large Numbers, Hypothesis Testing & Sample Size, Estimator vs Estimate, Simpson's Paradox, Bias-Variance Tradeoff, ANOVA, Bootstrap, Type I/II Errors, Precision/Recall, Z-test/T-test, Bayesian Inference, MLE, Regression.
+
+### 4.2 Hypothesis Testing
 
 **Z-test vs. T-test: When to Use Each**
 
@@ -1132,7 +1421,7 @@ where s is the sample standard deviation. The t-distribution has heavier tails t
 - **Normality**: For proportions with small base rates (e.g., violation rate = 0.01%), the normal approximation may be poor. Solution: use exact binomial tests or the Wilson score interval.
 - **Homoscedasticity** (equal variances): Welch's t-test does not assume this — always prefer Welch's over Student's t.
 
-### 3.2 Power Analysis
+### 4.3 Power Analysis
 
 Power = P(reject H0 | H1 is true) = 1 - beta. The four quantities are linked:
 
@@ -1153,7 +1442,7 @@ So approximately 6,735 content items per arm. If the platform processes millions
 
 **Variance reduction techniques**: CUPED (Controlled-experiment Using Pre-Experiment Data) uses pre-experiment covariates to reduce variance. If the pre-experiment covariate explains R^2 of the variance, the effective sample size increases by a factor of 1/(1-R^2). For safety metrics with strong temporal autocorrelation, CUPED can reduce required sample size by 30-50%.
 
-### 3.3 Type I and Type II Errors in Content Safety
+### 4.4 Type I and Type II Errors in Content Safety
 
 | Error Type | Statistical Definition | Content Safety Meaning | Cost |
 |---|---|---|---|
@@ -1162,7 +1451,7 @@ So approximately 6,735 content items per arm. If the platform processes millions
 
 The cost asymmetry is domain-dependent. For CSAM, the cost of a Type II error (missed content) is astronomical — legal liability, child safety. For borderline humor/satire, the cost of a Type I error (wrongful removal) is high — creator backlash, accusations of censorship. The optimal threshold for the classifier depends on this cost ratio. If C_FN / C_FP = 50 (missing a violation is 50x worse than wrongful removal), the optimal decision threshold shifts left, increasing recall at the expense of precision.
 
-### 3.4 Confidence Intervals
+### 4.5 Confidence Intervals
 
 A 95% confidence interval means: if we repeated this experiment many times, 95% of the computed intervals would contain the true parameter. It does NOT mean there is a 95% probability that the true parameter lies in this specific interval.
 
@@ -1173,7 +1462,7 @@ A 95% confidence interval means: if we repeated this experiment many times, 95% 
 
 The BCa (bias-corrected and accelerated) bootstrap adjusts for bias and skewness in the bootstrap distribution and generally outperforms the percentile method.
 
-### 3.5 Multiple Testing Corrections
+### 4.6 Multiple Testing Corrections
 
 When running multiple hypothesis tests simultaneously, the probability of at least one false positive inflates. With m independent tests at alpha = 0.05, P(at least one FP) = 1 - (1-0.05)^m. For m = 20 tests, this is 64%.
 
@@ -1188,7 +1477,13 @@ Use BH when running exploratory analyses (e.g., testing for metric differences a
 
 **Content safety application**: In an A/B test of a new moderation policy, you might look at 15 metrics (violation rate, FPR, appeal rate, creator churn, time-to-action, etc.). Bonferroni at alpha = 0.05/15 = 0.0033 per test is appropriate for the primary metric (violation rate). BH at FDR = 0.10 is appropriate for the secondary/exploratory metrics.
 
-### 3.6 XGBoost Deep-Dive
+→ See `statistical_foundations.md` for complete coverage of all 16 topics with worked examples.
+
+---
+
+## Section 5: ML & Modeling
+
+### 5.1 XGBoost Deep-Dive
 
 **How Gradient Boosting Works:**
 
@@ -1220,7 +1515,7 @@ This second-order information allows XGBoost to compute optimal splits more effi
 
 **Safety-specific tuning**: For fraud/violation detection with 0.1% positive rate, set `scale_pos_weight = 999` (ratio of negative to positive), use `eval_metric = 'aucpr'` (area under precision-recall curve, more informative than AUC-ROC for imbalanced data), and monitor both precision and recall on the validation set separately.
 
-### 3.7 Overfitting Prevention (Comprehensive)
+### 5.2 Overfitting Prevention (Comprehensive)
 
 1. **Regularization**: L1 (feature selection effect), L2 (weight shrinkage), and tree-specific regularization (max_depth, min_child_weight, gamma).
 2. **Early stopping**: Monitor validation loss; stop training when validation loss hasn't improved for `early_stopping_rounds` iterations. This automatically selects `n_estimators`.
@@ -1229,7 +1524,7 @@ This second-order information allows XGBoost to compute optimal splits more effi
 5. **Data augmentation**: For text-based content safety features, augment training data with paraphrases.
 6. **Ensemble**: Blend XGBoost with logistic regression and neural network — the combined model is typically more robust than any individual.
 
-### 3.8 Class Imbalance
+### 5.3 Class Imbalance
 
 Content moderation inherently involves extreme class imbalance. Violation rates of 0.01-1% are common.
 
@@ -1243,7 +1538,7 @@ Optimal threshold = argmin_t [ C_FP * FP(t) + C_FN * FN(t) ]
 
 **Precision-recall tradeoffs in content moderation**: The operating point depends on the violation category. For CSAM: optimize for recall (miss nothing), accept lower precision (more false removals reviewed by humans). For borderline humor: optimize for precision (don't wrongly remove), accept lower recall (some violations slip through but get caught by reports).
 
-### 3.9 Bias-Variance Tradeoff
+### 5.4 Bias-Variance Tradeoff
 
 Total error = Bias^2 + Variance + Irreducible noise.
 
@@ -1254,7 +1549,7 @@ Total error = Bias^2 + Variance + Irreducible noise.
 
 **Regularization paths**: Plot validation error as a function of regularization strength (e.g., lambda in L2). At lambda = 0, maximum variance. As lambda increases, variance decreases but bias increases. The optimal lambda minimizes validation error.
 
-### 3.10 Simpson's Paradox in Content Moderation
+### 5.5 Simpson's Paradox in Content Moderation
 
 **Example**: Automated moderation has a 90% accuracy overall, while human moderation has 85% accuracy overall. Should we replace humans with automation?
 
@@ -1268,9 +1563,260 @@ But within each category, human accuracy on hate speech (78%) dominates automate
 
 This paradox is directly relevant when evaluating aggregate safety metrics — always disaggregate by content type, language, and region.
 
+### 5.6 Model Evaluation
+
+**Beyond accuracy — the evaluation checklist for safety classifiers:**
+
+1. **Discrimination**: AUC-ROC (overall ranking quality) and AUC-PR (more informative for imbalanced data). For content safety with 0.1% positive rate, AUC-ROC can be 0.99 while AUC-PR is only 0.40 — always report both.
+
+2. **Calibration**: Are predicted probabilities accurate? A model that predicts p=0.8 should be correct ~80% of the time. Evaluate with reliability diagrams (plot predicted probability bins vs observed frequency). Poor calibration makes threshold selection unreliable. Fix with Platt scaling or isotonic regression.
+
+3. **Fairness**: Disaggregate performance by demographic group, language, dialect, and region. A hate speech classifier with 90% recall on English but 45% recall on Hindi is inequitable. Metrics: equalized odds (equal TPR and FPR across groups), demographic parity, calibration across groups.
+
+4. **Latency**: Safety classifiers must score content within milliseconds of upload. Report p50, p95, p99 inference latency. If p99 > 100ms, content may be served before moderation completes.
+
+5. **Adversarial robustness**: Test against known evasion techniques (encoding attacks, paraphrasing, code-switching). Report bypass rate under adversarial conditions.
+
+6. **Temporal stability**: Track performance over time. Content safety is adversarial — bad actors adapt. Monitor weekly AUC-PR decay rate. If decay > 0.01/week, the retraining cadence is too slow.
+
+### 5.7 Feature Selection for Safety Models
+
+**Principles:**
+- **Temporal validity**: Every feature must be available at prediction time. No look-ahead bias. Assert: feature_timestamp < prediction_timestamp.
+- **Feature importance**: Use permutation importance (model-agnostic, accounts for interactions) rather than gain-based importance (biased toward high-cardinality features).
+- **Correlation pruning**: If two features have Pearson correlation > 0.95, keep the one with higher permutation importance. High multicollinearity doesn't bias XGBoost predictions but inflates feature importance estimates.
+- **VIF check**: Variance Inflation Factor > 10 indicates multicollinearity. For interpretability-critical applications (regulatory reporting), prefer VIF < 5.
+- **Domain knowledge**: Features should map to meaningful abuse signals. "Account was created in the last 24 hours" is interpretable. "PCA component 47" is not.
+
 ---
 
-## Section 4: Product Cases
+## Section 6: A/B Testing & Experimentation
+
+### 6.1 The A/B Testing Lifecycle
+
+The complete lifecycle for safety experiments, from business question to decision:
+
+1. **Business question** → "Does this policy/classifier change improve safety without unacceptable collateral damage?"
+2. **Hypothesis** → Pre-register: "Lowering the threshold from 0.85 to 0.70 will reduce VVR by ≥10% relative without increasing FPR by more than 2pp."
+3. **Metric selection** → Primary (VVR), guardrails (FPR, appeal rate, creator churn, DAU), diagnostic (per-category VVR, latency, queue depth)
+4. **Power analysis** → Sample size, MDE, expected duration
+5. **Experiment design** → Unit of randomization, interference mitigation, pre-registration
+6. **Pre-experiment checks** → AA test, SRM check, covariate balance
+7. **Launch & monitor** → Real-time dashboards, sequential testing for early stopping
+8. **Analysis** → Pre-registered primary analysis + exploratory subgroup analyses
+9. **Decision** → Ship / iterate / kill, with quantified tradeoffs
+10. **Post-launch monitoring** → Novelty effect detection, long-run impact tracking
+
+→ See `notebooks/05_ab_testing_lifecycle.ipynb` for a complete worked example.
+
+### 6.2 Metric Definition for Safety Experiments
+
+**North Star Metrics:**
+- **Violating View Rate (VVR)** = violating views / total views. Captures both volume and reach.
+- **Time-to-Action (TTA)** = median time from content upload to enforcement action. SLA metric.
+
+**Guardrail Metrics:**
+- **False Positive Rate** = wrongful removals / total removals (estimated via human audit)
+- **Appeal Rate** = appeals filed / actions taken
+- **Appeal Overturn Rate** = successful appeals / total appeals
+- **Creator Churn (7d/30d)** = creators who stop posting after enforcement
+- **DAU/MAU** = overall engagement (must not degrade)
+
+**Diagnostic Metrics:**
+- Per-category violation rates, per-region enforcement rates
+- Classifier precision and recall at operating threshold
+- Human review queue depth and throughput
+- Report-to-action latency by priority tier
+
+**Metric decomposition**: When VVR changes, decompose:
+- Volume effect: more content posted (denominator change)
+- Rate effect: higher fraction of content violates (numerator rate change)
+- Detection effect: classifier recall changed (numerator detection change)
+- Mix effect: shift in content type composition (structural change)
+
+### 6.3 Experimental Design for Safety
+
+**Unit of randomization choices:**
+
+| Unit | When to Use | Advantages | Disadvantages |
+|------|------------|------------|---------------|
+| Content item | Independent moderation decisions | Large n, fast convergence | Inconsistent experience for creators |
+| Creator | Policy changes affecting creator behavior | Consistent creator experience | Creator-level effects confounded by content volume |
+| Creator cluster | Network effects expected | Reduces interference bias | Larger clusters → fewer units → lower power |
+| Region/market | Market-level policy | Clean separation | Very few units, low power |
+| Time (switchback) | Infrastructure changes | Full population coverage | Temporal carryover effects |
+
+**Key challenges unique to safety experiments:**
+- **Low base rates**: Violation rate ~0.01-1%, requiring large samples or ratio metrics
+- **Network effects**: Bad actors' alt accounts may span treatment/control
+- **Compliance**: Classifier accuracy varies by content type/language
+- **Delayed effects**: Creator behavior changes take weeks to manifest
+- **Ethical constraints**: Cannot deliberately expose users to harmful content
+
+### 6.4 Experimental Flaws & Solutions
+
+| Flaw | Detection | Solution |
+|------|-----------|----------|
+| **Sample Ratio Mismatch (SRM)** | Chi-squared test on assignment counts (p < 0.001 = problem) | Investigate randomization code, bot filtering, data pipeline |
+| **Novelty/primacy effects** | Plot daily treatment effect over time; early large effect that decays | Extend experiment duration, exclude first week from analysis |
+| **Interference/spillover** | Compare control outcomes by treatment neighbor fraction | Cluster randomization, ego-network analysis |
+| **Multiple testing** | Track number of metrics tested | Pre-register primary metric, Bonferroni/BH for secondary |
+| **Peeking** | Calendar of significance checks | Sequential testing (mSPRT, alpha spending) |
+| **Simpson's paradox** | Subgroup analysis reveals directional reversal | Always stratify by key dimensions (content type, region) |
+| **Survivorship bias** | Different attrition rates in treatment vs control | Intent-to-treat analysis, differential attrition test |
+| **Carryover effects** | Switchback designs show period-dependent effects | Extend washout periods between conditions |
+
+### 6.5 CUPED (Variance Reduction)
+
+**Controlled-experiment Using Pre-Experiment Data.** Uses pre-experiment covariates to reduce noise in experiment estimates.
+
+**Formula**: Y_cuped = Y - theta * (X - E[X]), where theta = Cov(Y, X) / Var(X).
+
+**Variance reduction**: Var(Y_cuped) = Var(Y) * (1 - rho^2), where rho = Corr(Y, X).
+
+**Practical impact**: If pre-experiment metric has rho = 0.65 correlation with post-experiment metric, variance reduces by 42%, equivalent to increasing sample size by 72%.
+
+**Best covariates for safety metrics**:
+- Pre-experiment VVR per creator (for VVR experiments): rho ~ 0.5-0.7
+- Pre-experiment posting frequency (for creator behavior experiments): rho ~ 0.6-0.8
+- Pre-experiment violation count (for enforcement experiments): rho ~ 0.4-0.6
+
+### 6.6 Sequential Testing
+
+**Problem**: Fixed-horizon tests require waiting until the pre-specified sample size. Safety teams need to monitor experiments continuously — but peeking inflates Type I error.
+
+**Solution: mSPRT (mixture Sequential Probability Ratio Test)**:
+- Defines an always-valid p-value that is correct at any stopping time
+- Uses a mixing distribution over effect sizes (typically a normal prior)
+- Alpha is "spent" across time according to a spending function
+- Can stop early if the always-valid p-value crosses the threshold at any interim analysis
+
+**O'Brien-Fleming spending function**: Conservative early, permissive late. At 50% of data: effective alpha = 0.003. At 100%: effective alpha = 0.048. Good for safety experiments where you want to stop early only for very large effects.
+
+**Pocock spending function**: Uniform spending across analyses. More permissive early. Use when you genuinely expect to stop early (e.g., launching a clearly beneficial safety improvement).
+
+### 6.7 Data Collection Methodology
+
+**Ensuring data quality for safety analysis:**
+
+1. **Logging completeness**: Verify all content items are logged. Check for missing data by comparing upstream event counts to downstream table row counts. Alert if delta > 1%.
+2. **Label quality**: Human moderation labels are noisy. Compute inter-rater reliability (Cohen's kappa). For safety labels, kappa > 0.7 is acceptable; < 0.5 requires label taxonomy review.
+3. **Sampling bias**: If classifiers route content to human review, the human-labeled data is biased (only borderline cases reviewed). Correct by weighting with inverse selection probability or by auditing a random sample.
+4. **Temporal alignment**: Ensure event timestamps are UTC-normalized. Time zone mismatches cause artificial day-boundary spikes in metrics.
+5. **Bot filtering**: Exclude automated/bot traffic before analysis. Use a combination of user-agent filtering, behavioral heuristics (>100 actions/minute), and known bot account lists. Document the filter criteria in the experiment pre-registration.
+
+→ See `applied_ds_tutorial.md` for dashboarding implementation and data collection patterns.
+→ See `notebooks/05_ab_testing_lifecycle.ipynb` for a full worked example.
+
+---
+
+## Section 7: Causal Inference
+
+### 7.1 Method Selection Decision Tree
+
+```
+Can you randomize?
+├── Yes → A/B test (Section 6)
+└── No → Was there a sharp threshold for assignment?
+    ├── Yes → Regression Discontinuity (7.3)
+    └── No → Was the intervention applied at a specific time?
+        ├── Yes → Is there a comparable control group/period?
+        │   ├── Yes → Difference-in-Differences (7.2)
+        │   └── No → Synthetic Control (7.5)
+        └── No → Is there an instrument?
+            ├── Yes → Instrumental Variables (7.4)
+            └── No → Propensity Score Methods (7.6)
+```
+
+### 7.2 Difference-in-Differences (DID)
+
+**Setup**: Treatment group receives intervention at time T. Control group does not. Compare the change in outcome for treatment vs control.
+
+**Estimator**: tau_DID = (Y_treat_post - Y_treat_pre) - (Y_ctrl_post - Y_ctrl_pre)
+
+**Key assumption**: Parallel trends — absent the intervention, treatment and control would have followed the same trajectory. Test by checking pre-treatment trends are parallel (regress Y on time * group using pre-period data; the interaction coefficient should be non-significant with p > 0.10).
+
+**Content safety application**: A new hate speech classifier is deployed in Region A but not Region B (due to staggered rollout). DID compares the change in VVR in Region A (treatment) vs Region B (control) before and after deployment. If pre-deployment VVR trends are parallel, the DID estimate gives the causal effect of the new classifier.
+
+**Threats**: Differential trends (Region A was already improving faster), concurrent events (a news event increased hate speech in Region A specifically), composition changes (Region A gained new users who post differently).
+
+### 7.3 Regression Discontinuity (RDD)
+
+**Setup**: Treatment is assigned based on a continuous running variable crossing a threshold (e.g., accounts with risk score > 0.7 get restricted).
+
+**Estimator**: Compare outcomes for units just above vs just below the threshold. At the threshold, assignment is quasi-random.
+
+**Diagnostics**:
+- **McCrary density test**: Check for manipulation — if units can control their running variable, they may sort below the threshold. Detected by a discontinuity in the density of the running variable at the threshold.
+- **Covariate smoothness**: Check that observable characteristics are continuous at the threshold (no jumps in account age, region distribution, etc.).
+- **Bandwidth sensitivity**: Results should be robust to bandwidth choice. Report estimates at multiple bandwidths (50%, 100%, 200% of optimal).
+
+**Content safety application**: Accounts with violation scores above 0.7 are automatically restricted. RDD compares accounts at 0.68-0.70 vs 0.70-0.72 to estimate the causal effect of restriction on subsequent behavior (recidivism rate, posting frequency, account survival).
+
+### 7.4 Instrumental Variables (IV / 2SLS)
+
+**Setup**: Treatment assignment is endogenous (confounded). An instrument Z affects treatment D but has no direct effect on outcome Y except through D.
+
+**Requirements**: (1) Relevance: Z predicts D (first-stage F > 10). (2) Exclusion: Z affects Y only through D. (3) Independence: Z is uncorrelated with unobserved confounders.
+
+**Content safety application**: To measure how content removal affects creator behavior, use the classifier's predicted probability as an instrument. The classifier score is correlated with removal (relevance) but the specific score variation (conditional on the content being near the threshold) is plausibly exogenous to creator behavior (exclusion). First stage: regress removal on classifier score. Second stage: regress creator behavior on instrumented removal.
+
+### 7.5 Synthetic Control
+
+**Setup**: A single treated unit (country, market) receives intervention. No traditional control group. Construct a synthetic counterfactual from a weighted combination of untreated units that matched the treated unit's pre-intervention trajectory.
+
+**Content safety application**: TikTok launches a new content policy in India but not in other South Asian markets. Synthetic control constructs a weighted combination of Pakistan, Bangladesh, Sri Lanka, etc. that matches India's pre-policy VVR trajectory. The gap between actual India VVR and synthetic India VVR estimates the causal effect.
+
+**Advantages**: Works with a single treated unit. Transparent — the weights show which control units contribute.
+
+**Limitations**: Requires a long pre-treatment period (≥10 time points). Sensitive to donor pool selection. No formal inference in the standard method (use permutation inference: apply the method to each untreated unit and compare the treated unit's effect to the distribution of placebo effects).
+
+### 7.6 Propensity Score Methods
+
+**Propensity Score Matching (PSM)**: Match treated units to control units with similar propensity scores (estimated probability of receiving treatment). Reduces observed confounding.
+
+**Inverse Propensity Weighting (IPW)**: Weight observations by the inverse of their propensity of being in their assigned group. Treatment: weight = 1/e(X). Control: weight = 1/(1-e(X)). Stabilized weights: normalize by the marginal treatment probability.
+
+**Doubly Robust Estimation**: Combines outcome regression with IPW. Consistent if EITHER the propensity model OR the outcome model is correctly specified (but not necessarily both).
+
+**Key limitations**: Only adjusts for OBSERVED confounders. If there are important unobserved confounders (and in safety there often are — e.g., user intent), the estimates are biased. Always conduct a sensitivity analysis: "How large would an unobserved confounder need to be to explain away this effect?" (Rosenbaum bounds).
+
+→ See `notebooks/06_causal_inference_lifecycle.ipynb` for complete implementations with synthetic data.
+→ See `statistical_foundations.md` for the mathematical foundations of each method.
+
+---
+
+## Section 8: Product Sense & Case Analysis
+
+**Product sense is confirmed as critical by TikTok insider and recruiter.** Every answer must demonstrate the "so what?" — connecting data analysis to product decisions, user experience, and business outcomes. For the complete product sense framework, see `product_sense.md`.
+
+### 8.1 Product Sense Framework (Summary)
+
+The **"So What?" Ladder**:
+1. **Observation**: "VVR increased by 15% this week"
+2. **Insight**: "The increase is driven by a 3x spike in spam video violations in SEA markets, coinciding with a new spam campaign using AI-generated content"
+3. **Recommendation**: "Deploy the updated spam classifier (tested offline with 92% precision at 85% recall) in SEA markets, with 1-week monitoring period"
+4. **Tradeoff**: "This will increase FPR by ~1.5pp in SEA, generating ~500 additional appeals/day. The cost of 500 appeals ($15K/week) is justified by the estimated $200K/week in advertiser brand safety risk from the spam campaign"
+
+**Metric selection logic**: North star (what we optimize) vs guardrail (what we protect) vs diagnostic (what we debug with). Every experiment needs all three.
+
+**The three-sided marketplace lens**: Every TikTok analysis involves creators, viewers, and advertisers. A change that helps viewers (less harmful content) may hurt creators (over-moderation) and advertisers (reduced inventory). Quantify the tradeoff.
+
+→ See `product_sense.md` for the complete framework, 6 worked cases, and 10 quick-fire drills.
+
+### 8.2 Case Analysis Methodology (5-Step Framework)
+
+| Step | Question to Ask | Output |
+|------|----------------|--------|
+| 1. Clarify | "What decision does this analysis inform?" | Clear problem statement |
+| 2. Metrics | "What does success look like? What must we protect?" | Primary + guardrails |
+| 3. Approach | "Can we randomize? What's the causal structure?" | Method selection |
+| 4. Feasibility | "Do we have the data? How long will this take?" | Practical constraints |
+| 5. Recommend | "Given the results, what should we do? What are the tradeoffs?" | Decision + quantified tradeoffs |
+
+### 8.3 Worked Cases
+
+#### Case 1: "Should We Launch a Stricter Content Moderation Policy?"
 
 ### Case 1: "Should We Launch a Stricter Content Moderation Policy?"
 
@@ -1356,11 +1902,115 @@ CIB has three hallmarks: (1) multiple accounts acting in concert, (2) behavior t
 
 *Metrics for the detection system*: Track: number of CIB campaigns detected per month, median detection latency (time from campaign start to detection), precision@90recall on a held-out evaluation set, and the reduction in amplified violating content attributable to CIB takedowns.
 
+**Product impact**: CIB undermines advertiser trust (brands don't want to pay for fake engagement), erodes user trust (users leave when they suspect manipulation), and creates regulatory risk (DSA requires platforms to address coordinated manipulation). Quantify: "Each undetected CIB campaign generates an estimated X fake impressions per day, costing advertisers $Y in wasted spend."
+
+#### Case 3: "Should We Rank Down Bad Sellers on E-commerce?" (Prior Interview Question)
+
+**Context**: TikTok Shop has identified sellers with suspected fraudulent behavior (fake reviews, misleading product descriptions, counterfeit goods). The proposed intervention is algorithmic throttling — reducing these sellers' content distribution in the recommendation feed. The question: should we launch this, and how do we evaluate its effectiveness?
+
+**Step 1: Clarify** — "What decision does this inform?" We need to decide: (a) whether throttling is effective at reducing bad seller activity, (b) whether the collateral damage (impact on legitimate sellers, GMV loss) is acceptable, and (c) the optimal throttling intensity (50% reduction vs 90% reduction vs full removal).
+
+**Step 2: Metrics** — Primary: Bad seller GMV reduction (should decrease), buyer dispute rate on bad seller transactions (should decrease), buyer satisfaction score post-purchase. Guardrails: Legitimate seller GMV (must not decrease by >1%), platform total GMV (must not decrease by >0.5%), buyer DAU. Diagnostic: New bad seller account creation rate (deterrence), bad seller migration to other content formats, cross-category displacement.
+
+**Step 3: Approach** — If we can randomize: A/B test at the seller level. Randomize identified bad sellers to treatment (throttled) vs control (business as usual). Sample size: with n=10,000 bad sellers, 80% power to detect 15% relative GMV reduction. Duration: 4 weeks minimum to capture purchase cycles. If we cannot randomize (e.g., regulatory requirement to act on all identified bad sellers): use DID comparing bad seller metrics before/after throttling vs legitimate seller metrics. Or RDD if throttling is applied based on a risk score threshold.
+
+**Step 4: Feasibility** — Key challenge: network effects between sellers. If throttled bad sellers lose traffic, competing legitimate sellers may gain traffic (positive spillover to control). This biases DID toward overestimating the effect. Mitigate by using product category as a blocking factor and analyzing within-category effects.
+
+**Step 5: Recommend** — "Based on the A/B test, throttling reduced bad seller GMV by 28% (95% CI: [22%, 34%]) with no significant impact on legitimate seller GMV (-0.3%, 95% CI: [-0.9%, 0.3%]). Buyer dispute rate decreased by 19%. New bad seller account creation decreased by 12%, suggesting a deterrence effect. Recommend: launch throttling at 75% distribution reduction for sellers with risk score > 0.8. Monitor for displacement to other formats (LIVE, comments) and new account creation patterns."
+
+**Product lens**: This is fundamentally about marketplace trust. Buyers who have bad experiences churn at 3x the rate of satisfied buyers. The lifetime value calculation: if throttling prevents 10,000 bad transactions per month, and each prevented bad transaction saves one buyer from churning (LTV = $50), the value is $500K/month — far exceeding the lost GMV from bad sellers.
+
+#### Case 4: "How Would You Identify Bad Sellers — Feature Design" (Prior Interview Question)
+
+**Context**: Before we can throttle bad sellers, we need to identify them. Design a classification system to distinguish bad sellers from legitimate ones.
+
+**Step 1: Define "bad seller"** — Operational definition: a seller whose products or practices cause disproportionate buyer harm, as measured by: (a) return/refund rate > 3x category median, (b) dispute rate > 5x category median, (c) review sentiment score in bottom 5th percentile, (d) product description accuracy < 70% (measured by human audit), or (e) confirmed policy violation (counterfeit, prohibited items). A seller meeting any two criteria is classified as "bad."
+
+**Step 2: Feature engineering** —
+
+| Feature Category | Specific Features | Signal |
+|-----------------|-------------------|--------|
+| **Transaction quality** | Return rate, refund rate, dispute rate, chargeback rate (all relative to category median) | Direct buyer harm indicators |
+| **Review signals** | Average review sentiment, review velocity anomaly (sudden positive reviews = bought reviews), review text diversity (low diversity = fake reviews) | Social proof manipulation |
+| **Product signals** | Price vs category median (too low = counterfeit risk), description length vs actual product match, image reverse-search hits, number of product variants | Product authenticity |
+| **Account signals** | Account age, verification status, previous violations, linked accounts (same device/IP/payment) | Account trustworthiness |
+| **Behavioral signals** | Listing frequency (spam-like behavior), response time to buyer messages, shipping time variance, pricing changes (bait-and-switch) | Operational quality |
+
+**Step 3: Model** — XGBoost classifier with the features above. Train on historically confirmed bad sellers (policy team labels) as positives and long-standing sellers with low complaint rates as negatives. Use stratified 5-fold CV, optimize for AUC-PR (not AUC-ROC, due to class imbalance ~2% positive rate). Feature importance analysis: expect return rate, review sentiment, and account age to dominate.
+
+**Step 4: Product connection** — The model outputs a risk score [0, 1]. Product actions mapped to score ranges: score > 0.9 → immediate investigation + temporary throttling. Score 0.7-0.9 → enhanced monitoring + buyer warnings. Score 0.5-0.7 → monitoring only. Score < 0.5 → normal operation. False positive handling: sellers can appeal through a review process. If appealed and overturned, retrain the model with the correction. Track FPR monthly; target < 5% at the investigation threshold.
+
+**Product lens**: The user experience when bad sellers are present: buyer searches for product → sees listing with fake reviews → purchases → receives counterfeit/low-quality product → files dispute → loses trust in TikTok Shop. Each bad experience has a ripple effect: the buyer tells others, reducing platform word-of-mouth. The model's precision directly impacts buyer trust.
+
+#### Case 5: "Should We Launch Friction Warnings Before Posting?"
+
+**Context**: Propose an intervention where users whose draft content is flagged by a pre-publication classifier receive a warning ("This content may violate community guidelines. Are you sure you want to post?") before publishing. The question: does this reduce violations without chilling legitimate expression?
+
+**Step 1: Clarify** — This is a behavioral intervention, not a moderation action. The content is not removed — the user chooses whether to post. The goal is deterrence through awareness, not enforcement.
+
+**Step 2: Metrics** — Primary: Violation rate reduction (fraction of warned users who modify or abandon their content, and the resulting VVR change). Guardrails: Posting completion rate (must not decrease by >5% for non-violating content), creator satisfaction (survey), creator churn (7-day). Diagnostic: Warning dismissal rate (users who post anyway), content modification rate (users who edit after warning), warning accuracy (fraction of warnings that would have been actual violations).
+
+**Step 3: Experiment design** — User-level randomization. Treatment: users see warnings when draft content triggers the pre-publication classifier. Control: standard experience (no pre-publication warning). The pre-publication classifier has precision = 60% and recall = 40% — intentionally tuned for higher recall at the cost of more false warnings, since false warnings are low-cost (a brief interruption vs no warning at all).
+
+**Step 4: Expected results and tradeoffs** — If 30% of warned users abandon or modify their content, and 60% of warnings are true positives, the expected VVR reduction is approximately 0.30 * 0.60 * (fraction of violations caught by pre-publication classifier) = ~7% relative VVR reduction. The key tradeoff: the chilling effect. If 15% of legitimate creators who receive false warnings reduce their posting frequency, the warning feature may reduce content diversity. Measure this by tracking posting frequency for creators who receive false warnings vs creators who receive no warnings.
+
+**Step 5: Recommend** — "The friction warning reduced VVR by 8.3% (95% CI: [5.1%, 11.5%]) with a posting completion rate decrease of 3.2% for non-violating content (within the 5% guardrail). However, creators who received false warnings showed a 9% reduction in posting frequency over the following week. Recommend: launch for high-confidence violation types (CSAM, spam) where classifier precision exceeds 80%, but do NOT launch for borderline categories (humor, commentary) where false warning rates would be unacceptable."
+
+**Product lens**: This shifts the content moderation paradigm from punitive (remove after posting) to educational (warn before posting). Long-term, if users internalize the guidelines, violation rates should decrease even without the warning — measuring this behavioral learning effect requires a longer experiment with a holdout group.
+
+→ See `notebooks/05_ab_testing_lifecycle.ipynb` for the complete worked example of this scenario.
+
+#### Case 6: "TikTok LIVE Gifting Safety Policy Change"
+
+**Context**: TikTok LIVE allows viewers to send virtual gifts to creators (purchased with coins, converted to diamonds, cashed out). Concerning patterns have been identified: (a) minors spending excessive amounts, (b) potential financial exploitation of vulnerable users, (c) money laundering through gift cycling. The proposed intervention: impose daily gifting limits of $100 for unverified accounts and $500 for verified accounts, with enhanced monitoring for accounts exceeding $200/day.
+
+**Step 1: Clarify** — This is a three-sided marketplace intervention: it affects gifters (spending limits), creators (revenue impact), and the platform (commission revenue). The decision: are the safety benefits (reduced harm) worth the revenue cost?
+
+**Step 2: Metrics** — Primary: Harmful gifting reduction (gifting by minors, identified exploitation patterns, suspicious cycling patterns). Revenue impact: platform commission from gifting (direct P&L impact). Creator metrics: creator revenue from gifts, creator streaming hours (will creators leave if revenue drops?). Guardrails: Legitimate gifter satisfaction, creator retention, total LIVE viewership.
+
+**Step 3: Approach** — Staggered rollout: implement limits in 3 markets first, compare to remaining markets using DID. The staggering provides a natural control group. Within the rollout markets, analyze:
+- How many users are affected? (What fraction of gifters exceed the new limits?)
+- What is the distribution of gifting amounts? (If only 2% of gifters exceed $100/day, the impact on legitimate users is minimal)
+- Do affected users shift behavior (smaller gifts, more frequent) or stop gifting entirely?
+- Do creators in affected markets change streaming behavior?
+
+**Step 4: Quantify tradeoffs** — If 3% of gifters exceed $100/day and account for 40% of total gifting revenue, the policy could reduce gifting revenue by up to 25% (assuming some gifters reduce to the limit rather than stopping entirely). However, if 80% of these high-value gifters reduce to the limit rather than churning, the actual revenue impact is ~8%. Against this: if harmful gifting incidents decrease by 70%, regulatory risk decreases substantially (potential fines in the EU could be 6% of revenue), and user trust in the LIVE platform increases.
+
+**Step 5: Recommend** — "Implement limits in a phased rollout. Start with $200 daily limit for unverified accounts (less aggressive than proposed $100). Monitor for 4 weeks. If harmful gifting decreases by >50% and revenue impact is <5%, extend to all markets. If revenue impact exceeds 10%, consider tiered limits (lower for unverified, higher for age-verified accounts) to balance safety and revenue."
+
+**Product lens**: TikTok LIVE is a growth driver. Over-restricting gifting kills the creator economy that makes LIVE valuable. Under-restricting exposes the platform to regulatory action and reputational damage. The optimal policy is not one-size-fits-all — it should be risk-segmented (higher limits for verified adults, lower for unverified/young users).
+
+### 8.4 Quick-Fire Product Sense Drills
+
+For each scenario, prepare a 2-minute structured response: what happened → why it matters → how to investigate → what to recommend.
+
+1. **"VVR went up 15% this week"** — Decompose: volume vs rate vs detection effect. Check per-category: is it concentrated (one violation type) or broad? Check per-region: localized or global? Check pipelines: data completeness? If real and concentrated: identify the specific abuse vector, check classifier performance for that category, propose targeted response. If real and broad: check for platform-wide changes (new content format, user growth spike in poorly-covered region).
+
+2. **"Creator appeals are up 40%"** — First: is appeal volume up (absolute) or appeal rate up (per enforcement action)? If volume up but rate stable: more enforcement actions are happening (check if a new policy launched). If rate up: enforcement accuracy may have degraded. Disaggregate by violation category — a classifier update may have increased FPR for one category. Check appeal overturn rate — if overturn rate is also up, the enforcement is genuinely less accurate.
+
+3. **"New market launched with no safety baseline"** — Design the measurement system: (a) define the metric taxonomy (VVR, FPR, TTA) using the global framework, (b) estimate expected ranges using similar markets (transfer learning for metrics), (c) run a 2-week calibration period to establish baselines, (d) set provisional alert thresholds at 2 sigma from the calibration baseline, (e) refine thresholds after 8 weeks of data.
+
+4. **"Spam classifier precision dropped 5pp"** — Check: is it a model issue or a distribution shift? Compare feature distributions between training data and recent production data (PSI — Population Stability Index). If PSI > 0.25 for key features, the input distribution has shifted — retrain. If features are stable, check label quality — has the definition of spam changed? Also check: is precision dropping because spammers adapted (adversarial drift)?
+
+5. **"User reports increased but confirmed violations didn't"** — Possible causes: (a) report button became more accessible (UI change), (b) users are weaponizing reports (report bombing), (c) the review process has a backlog and hasn't processed the new reports yet, (d) the type of reported content has shifted to a gray area where reviewers disagree. Investigate by comparing the report-to-confirmation rate before and after the change.
+
+6. **"A/B test shows engagement up 3% but time-to-first-violation decreased"** — The feature accelerates user engagement INCLUDING engagement with violating content. Decompose: is the violation rate up (more violating content per session) or is users' time-to-encounter-violation down (they encounter the same violating content faster because they're engaging more)? Compute the Safety-Adjusted Engagement metric. If SAE is negative, do not ship.
+
+7. **"Moderation queue backlog growing 10% WoW"** — Is inflow increasing (more content flagged) or throughput decreasing (moderators slower)? Check: (a) classifier threshold changes that increased flagging, (b) content volume growth, (c) moderator productivity (items/hour), (d) hiring/attrition. Recommend: short-term — raise the automated classifier confidence threshold to reduce human review queue (accept higher FNR temporarily). Long-term — improve classifier to automate more decisions.
+
+8. **"New content format (AI-generated) has no moderation coverage"** — Immediate: sample 1,000 AI-generated items, have human reviewers label them for violations. Establish baseline violation rate. Build a detection model for AI-generated content (metadata signals, generation artifacts). Integrate AI-generated content flag into the existing moderation pipeline. Set a temporary policy: AI-generated content gets human review until automated coverage reaches 80% recall.
+
+9. **"Creator churn in Region X spiked after policy update"** — Identify: which creators churned (violation history, content type, follower count)? Compute: what fraction of churned creators had enforcement actions in the policy change period? Use DID: compare churn in Region X (policy change) vs similar regions (no change). If the policy caused churn of primarily innocent creators (false positives), roll back or adjust thresholds for Region X.
+
+10. **"Revenue from content category Y is high but violation rate is also high"** — This is the classic safety-revenue tension. Quantify: what fraction of revenue from category Y comes from violating content? If 90% of revenue is from legitimate content and 10% from violating content, aggressive enforcement costs only 10% of category revenue while dramatically improving safety. Compute the net benefit function. Often, the revenue loss from enforcement is much smaller than assumed because most revenue comes from legitimate content.
+
 ---
 
-## Section 5: HM Round — STAR Stories
+## Section 12: STAR Stories
 
-Each story follows Situation-Task-Action-Result with deep technical substance. Numbers, methods, and tools are emphasized throughout.
+Each story follows Situation-Task-Action-Result with deep technical substance. Numbers, methods, and tools are emphasized throughout. Every answer leads with methodology, not collaboration.
+
+→ See `talk_tracking.md` for how to bridge each story to TikTok I&S competencies.
 
 ### Story 1: Improved 3D Medical Image Reconstruction Quality with Conditional GAN
 
@@ -1422,11 +2072,35 @@ Each story follows Situation-Task-Action-Result with deep technical substance. N
 
 **Situation**: The weekly safety report showed a 12% decrease in violating view rate (VVR) — a suspiciously large improvement that no policy change could explain. Leadership was about to present this as a success to the board. **Task**: Verify the metric change and identify the root cause. **Action**: Applied a systematic root cause analysis: (1) Checked metric definition — VVR = violating views / total views. Computed numerator and denominator separately. Numerator decreased 8%, denominator increased 5%. Both contributed to VVR decrease. (2) Decomposed numerator by data source — discovered that one of three content classification pipelines (handling live stream content) had stopped writing to the violations table 10 days ago. A schema migration on the upstream table added a NOT NULL constraint to a column that the pipeline was leaving NULL, causing silent row drops. (3) Quantified the impact: live stream content represented 23% of total violating views. The pipeline failure was artificially deflating the numerator by ~23%, accounting for 8-9pp of the 12% VVR decrease. (4) Verified by reprocessing the dropped data through a backfill job. After backfill, actual VVR change was -3.4% — consistent with an incremental classifier improvement deployed that week. **Result**: Prevented leadership from presenting inflated results to the board. The pipeline bug was fixed within 24 hours (added explicit NULL handling and a data quality check that alerts if row counts from any pipeline drop by >10% day-over-day). Implemented a metric integrity monitoring system that compares component-level metric contributions against historical baselines and fires an alert when any component deviates by >2 standard deviations.
 
+### Story 16: Designed Causal Evaluation for Policy Change Without Randomization (Experience Bridge)
+
+**Situation**: A medical imaging department implemented a new AI-assisted diagnosis protocol across all scanners simultaneously — there was no control group. Leadership wanted to know if the protocol improved diagnostic accuracy. **Task**: Estimate the causal effect of the protocol without randomized control. **Action**: Implemented three complementary approaches: (1) **DID with staggered adoption**: Two hospitals adopted the protocol 3 months apart. Used the later adopter as a temporary control, estimating the ATT via two-way fixed effects regression. Tested parallel trends using 12 months of pre-adoption data (interaction coefficient p = 0.34 — non-significant, supporting the parallel trends assumption). (2) **Interrupted time series (ITS)**: For the first adopter (no control available), modeled the pre-intervention trend with ARIMA(1,1,0), projected the counterfactual, and compared actual vs predicted. Tested for autocorrelation in residuals (Durbin-Watson = 1.92). (3) **Sensitivity analysis**: Computed Rosenbaum bounds — the result was robust to an unobserved confounder with gamma up to 1.8. **Result**: All three methods converged: DID estimated a 12.3% improvement in diagnostic accuracy (95% CI: [8.1%, 16.5%]), ITS estimated 10.8% (95% CI: [6.4%, 15.2%]). The convergence across methods strengthened the causal claim. Presented to hospital leadership with explicit caveats about the identifying assumptions.
+
+**Bridge to TikTok**: This is exactly how you'd evaluate a safety policy deployed globally without A/B testing — staggered market rollout enables DID, single-market deployment requires ITS or synthetic control. The same framework applies to evaluating the effectiveness of any content moderation policy change.
+
+### Story 17: Built Multi-Metric Evaluation System for Competing Approaches (Experience Bridge)
+
+**Situation**: Three different image reconstruction algorithms (OSEM, conditional GAN, diffusion model) needed comparison across 7 metrics, with different stakeholders caring about different metrics — clinicians prioritized diagnostic accuracy, researchers prioritized SSIM/PSNR, and the operations team prioritized latency. **Task**: Build an evaluation system that produced objective, statistically rigorous comparisons while accounting for multiple stakeholder perspectives. **Action**: (1) Designed a hierarchical evaluation: primary metric (diagnostic task accuracy), secondary metrics (SSIM, PSNR, RMSE), and operational metrics (latency, memory usage). (2) Used pre-registered analysis: primary metric tested at alpha = 0.05, secondary metrics tested with Benjamini-Hochberg at FDR = 0.10. (3) Built a composite score with stakeholder-specific weights (3 weighting profiles: clinical, research, operations). (4) Implemented a dashboard showing all pairwise comparisons with effect sizes, CIs, and p-values for each metric. (5) Added a sensitivity analysis: how robust is the ranking to changes in metric weights? Computed the weight range within which each algorithm is optimal. **Result**: The evaluation revealed that no single algorithm dominated across all metrics — the GAN was best on SSIM/PSNR but equivalent on diagnostic accuracy and worst on latency. The composite score with clinical weights favored the GAN; with operational weights, OSEM with post-processing was preferred. This nuanced result prevented premature deployment of an algorithm that would have degraded operational performance.
+
+**Bridge to TikTok**: This maps directly to evaluating competing content classifiers, moderation policies, or safety interventions where different teams care about different metrics (safety team: recall; product team: FPR and creator churn; business team: engagement impact). The composite scoring and multi-stakeholder weighting framework is immediately applicable.
+
 ---
 
-## Section 6: Open-Ended Questions
+## Section 9: Round 2 — HM Open-Ended Questions
 
-### Question 1: "Evaluate the Effectiveness of Content Throttling on Combating Bad Sellers"
+The HM evaluates your ability to independently structure, analyze, and recommend on complex open-ended problems. Lead with a quantitative framework, not a process description.
+
+### 9.1 Evaluation Pre-Feasibility Template
+
+Before diving into analysis, quickly assess feasibility:
+1. **Data availability**: Do we have the data? How granular? How far back?
+2. **Causal structure**: Can we randomize? If not, what's the identification strategy?
+3. **Timeline**: How quickly is the decision needed? Can we run a full experiment?
+4. **Constraints**: Ethical limits? Legal requirements? Engineering dependencies?
+
+### 9.2 Open-Ended Questions
+
+#### Question 1: "Evaluate the Effectiveness of Content Throttling on Combating Bad Sellers"
 
 This is the actual interview question (adapted for content safety). Framework:
 
@@ -1541,7 +2215,109 @@ Present the tradeoff curve (precision vs. recall at various thresholds) to stake
 
 ---
 
-## Section 7: Behavioral Questions
+### 9.3 Metric Monitoring & Anomaly Attribution
+
+**Framework for anomaly diagnosis (use for any "metric changed" question):**
+
+1. **Validate**: Is the change real or a data artifact? Check data completeness, pipeline health, logging changes.
+2. **Decompose**: Break the metric into components. For VVR: volume × rate × detection. Which component changed?
+3. **Segment**: Disaggregate by region, content type, violation category, user segment. Is the change concentrated or broad?
+4. **Attribute**: Identify the proximate cause. Check: policy changes, classifier updates, traffic shifts, external events, bot activity.
+5. **Quantify**: Estimate the impact. "This anomaly represents X% of total metric movement, attributable to Y, with estimated Z impact on [business outcome]."
+6. **Recommend**: Propose action with tradeoffs. "We should [action] because [quantified benefit] outweighs [quantified cost]."
+
+---
+
+## Section 10: Round 3 — Skip-Level Manager
+
+The skip-level manager (often a department head based in Beijing) evaluates strategic thinking, business understanding, and the ability to independently identify high-impact opportunities. This round tests whether you can think beyond assigned tasks.
+
+→ See `skip_level_prep.md` for the complete preparation guide with worked examples.
+
+### 10.1 Exploration: Seeking Opportunity Points
+
+**Framework**: Independently identify analysis opportunities that leadership hasn't requested but that would drive high impact.
+
+**Five patterns for identifying opportunities:**
+1. **Measurement gaps**: "We track VVR but not per-language VVR — a disaggregation analysis would reveal which languages have the worst classifier coverage."
+2. **Cross-functional insights**: "The product team's engagement metrics and the safety team's violation metrics are tracked separately — correlating them would reveal whether engagement features inadvertently promote violating content."
+3. **Predictive signals**: "We respond to violations reactively — building a leading indicator model (creator trajectory prediction) would enable proactive intervention before violations occur."
+4. **Efficiency improvements**: "Each experiment takes 4 weeks because we don't use variance reduction — implementing CUPED platform-wide would cut experiment duration by 30%."
+5. **External benchmarking**: "We don't systematically track how our safety metrics compare to competitors — a quarterly benchmark report would help prioritize investments."
+
+### 10.2 Statistical Methods in Business Problems
+
+**Key principle**: The skip-level wants to see that you can select the RIGHT method for the business problem, not just execute a method. For each common business question, know: which method, why that method, what assumptions, and what decision it informs.
+
+| Business Question | Statistical Method | Why This Method | Key Assumption |
+|---|---|---|---|
+| "Did this policy change work?" | DID | Before-after comparison with control | Parallel trends |
+| "Which users should we prioritize for review?" | XGBoost + calibration | Ranked risk scoring | Feature quality, label accuracy |
+| "Is this metric change real?" | CUSUM / EWMA control charts | Robust to noise, sequential detection | Stationarity of baseline |
+| "How long until creators churn after violation?" | Survival analysis (Cox PH) | Handles censoring, time-varying covariates | Proportional hazards |
+| "What's driving the metric change?" | Metric decomposition | Separates mix, rate, volume effects | Correct component definitions |
+| "Are regional differences significant?" | ANOVA + post-hoc tests | Multiple group comparison | Normality, homoscedasticity |
+| "Can we predict which content will go viral (and be risky)?" | Logistic regression + network features | Interpretable, calibrated probabilities | Linearity in log-odds |
+| "What if we hadn't launched the policy?" | Synthetic control | Constructs counterfactual from other markets | Long pre-period, no spillover |
+| "Are these users a coordinated group?" | Graph clustering (Louvain) | Community detection in interaction networks | Network structure captures coordination |
+| "How sensitive is the result to our assumptions?" | Sensitivity analysis (Rosenbaum bounds) | Quantifies robustness to confounding | Bounds on unmeasured confounding |
+
+→ See `skip_level_prep.md` Section 3 for 10 fully worked examples.
+
+### 10.3 Data Efficiency and Optimization
+
+**Key strategies:**
+- **CUPED**: Use pre-experiment metrics as covariates to reduce variance by 30-50%. This directly translates to shorter experiments or smaller MDE.
+- **Sequential testing**: Monitor continuously without inflating Type I error. Saves 1-2 weeks per experiment on average.
+- **Stratified randomization**: Block on key covariates (region, user tier) to ensure balance. Reduces bias and can improve power.
+- **Proxy metrics**: Use short-term proxies (7-day retention) instead of long-term outcomes (90-day LTV) to get faster signals. Validate the proxy by computing the historical correlation with the true outcome.
+- **Bayesian methods**: For small-sample experiments, Bayesian A/B testing with informative priors (from historical experiments) can give useful posterior probabilities even with limited data.
+
+### 10.4 Business Understanding: Douyin / TikTok / LIVE
+
+**Key points to demonstrate in the skip-level round:**
+
+- TikTok is a three-sided marketplace: **creators** (supply content), **viewers** (consume content), **advertisers** (pay for attention). Safety affects all three.
+- **Revenue model**: Primarily advertising (in-feed, branded effects, Spark Ads) + TikTok Shop (e-commerce commission) + LIVE gifting (platform takes 50% of gift value). Safety issues directly impact advertiser willingness to spend (brand safety).
+- **Douyin differences**: More mature e-commerce (Douyin Shop), mini-programs, local services, deeper integration with ByteDance ecosystem. Safety challenges are similar but regulatory environment differs (Chinese vs global regulations).
+- **LIVE-specific challenges**: Real-time moderation is harder than pre-published video (no pre-screening), gifting creates financial incentive structures that can be exploited, minor protection requires real-time age verification.
+- **Regulatory landscape**: EU Digital Services Act (DSA) requires transparency reports, risk assessments, and researcher data access. US KOSA (Kids Online Safety Act) focuses on minor protection. Platform must demonstrate proactive safety measures. DS role: providing the quantitative evidence for compliance.
+- **Safety as competitive advantage**: Advertisers choose platforms with strong brand safety. A 1pp improvement in VVR can translate to increased advertiser confidence and higher CPM rates.
+
+→ See `skip_level_prep.md` Section 5 for the comprehensive business deep-dive.
+
+### 10.5 Model Answers for Skip-Level Questions
+
+**"What's the biggest opportunity for improving platform safety with DS?"**
+"The biggest leverage point is predictive prevention — moving from reactive enforcement (detect and remove violations after they happen) to proactive risk assessment (identify high-risk content and accounts before violations occur). Currently, ~60% of violating content is seen by at least one user before removal. A predictive model using creator trajectory features (posting pattern changes, audience composition shifts, behavioral velocity) could flag high-risk content for pre-publication review. Based on the existing data, I estimate this could reduce VVR by 15-20% by intercepting violations before they generate views. The key challenge is maintaining precision to avoid chilling legitimate expression."
+
+**"How would you measure the ROI of the safety team?"**
+"I'd frame it in three layers: (1) **Direct cost avoidance**: regulatory fines avoided (EU DSA penalties up to 6% of revenue), advertiser churn prevented (each brand safety incident risks $X in advertiser revenue), litigation costs avoided. (2) **User trust value**: quantify the relationship between safety metrics and user retention using a DID framework — exogenous safety shocks (classifier degradation incidents) provide natural experiments. If a 1pp VVR increase causes 0.3% DAU decrease, and each DAU is worth $Y in ad revenue, the safety team's VVR improvements have direct revenue implications. (3) **Competitive moat**: benchmark VVR against competitors (from transparency reports) and estimate the advertiser spend share attributable to relative safety performance."
+
+→ See `skip_level_prep.md` for 8 fully worked model answers.
+
+---
+
+## Section 11: Round 4 — HRBP
+
+### 11.1 What HRBP Evaluates
+
+The HRBP round assesses culture fit, growth mindset, and alignment with ByteDance/TikTok values. Unlike the HM round (which wants pure technical depth), the HRBP wants to see:
+- **Self-awareness**: Do you understand your strengths and development areas?
+- **Adaptability**: Can you thrive in a fast-paced, ambiguous environment?
+- **Values alignment**: Do you embody ByteDance's core values?
+- **Communication**: Can you explain complex concepts to non-technical stakeholders?
+- **Motivation**: Why TikTok? Why this role? What drives you?
+
+### 11.2 TikTok/ByteDance Culture & Values
+
+**Core values to reference:**
+- **"Always Day 1"** — Maintain startup urgency regardless of company size. Map to: "I approach every analysis as if the decision depends on it urgently."
+- **"Be Candid and Clear"** — Direct communication, no hiding behind ambiguity. Map to: "When my analysis shows a result leadership won't like, I present it clearly with quantified implications."
+- **"Seek Truth and Be Pragmatic"** — Data-driven decisions, avoid ideology. Map to: "I follow the data even when it contradicts prior assumptions — the model deployed with a bug taught me that."
+- **"Be Inclusive and Aim for the Highest"** — Work across boundaries, pursue excellence. Map to: "My experimentation framework was adopted by 3 teams because I built it to be generally useful, not just for my team."
+
+### 11.3 HRBP Behavioral Questions
 
 Every behavioral answer is framed with technical substance, not soft skills. The HM rejected collaboration framing — these answers lead with methodology.
 
@@ -1575,9 +2351,55 @@ Every behavioral answer is framed with technical substance, not soft skills. The
 
 **Situation**: Three teams (safety, growth, and monetization) were running A/B tests independently with inconsistent methodology — different significance levels (0.05, 0.10, 0.01), different multiple testing corrections (none, Bonferroni, Sidak), no pre-registration, and no guardrail metrics. Two experiments shipped changes that later showed negative safety impact that wasn't detected because the safety team's metrics weren't included as guardrails. **Task**: Standardize experimentation methodology across teams. **Action**: Built an experiment design template that codified: (1) mandatory pre-registration (hypothesis, primary metric, guardrail metrics, sample size calculation, analysis plan), (2) standard significance level (alpha = 0.05, two-sided) with mandatory safety guardrails for all experiments regardless of team, (3) sequential testing protocol (mSPRT with alpha-spending function for interim analyses — eliminates p-hacking from repeated peeking), (4) CUPED variance reduction as default (reduced required experiment duration by 30-40% across the board), (5) automated post-experiment analysis pipeline that generates a standardized report (point estimates, CIs, guardrail checks, novelty effect detection via time-series decomposition of daily treatment effects). Validated the framework by re-analyzing the two experiments that shipped negative safety impact — both would have been caught by the mandatory safety guardrails. Presented a quantitative retrospective: "Framework would have prevented $1.2M in safety-related costs across these two incidents." **Result**: Framework was adopted by all three teams within 6 weeks. In the following quarter, 47 experiments used the framework. Three experiments were blocked by safety guardrails that would not have been checked under the old process. Experiment velocity increased 25% because CUPED reduced required duration, and the automated analysis pipeline reduced analyst time from 2 days to 3 hours per experiment.
 
+### Question 6: "Why TikTok? Why This Role?"
+
+**Frame around technical challenge and scale, not brand affinity.**
+
+"Three reasons. First, **scale of impact**: TikTok processes billions of content items daily across 150+ countries and 40+ languages. The statistical challenges at this scale — rare event detection, interference in experiments, multi-lingual classifier evaluation — are exactly what I find intellectually compelling. Second, **causal inference in adversarial settings**: content safety is one of the few domains where the data generating process is actively adversarial — bad actors adapt to your models. This requires a level of methodological sophistication (adversarial robustness, adaptive experimentation, real-time anomaly detection) that's rare in other DS roles. Third, **measurable societal impact**: reducing VVR by 1pp translates to millions fewer harmful content exposures per day. My background in medical imaging taught me that quantitative rigor can directly improve human outcomes — content safety offers the same connection between methodology and impact, at a much larger scale."
+
+### Question 7: "What's Your Greatest Weakness?"
+
+**Frame as a genuine development area with concrete improvement actions.**
+
+"My default is to over-invest in methodological rigor at the expense of speed. In my first year, I spent 3 weeks building a comprehensive validation framework when leadership needed a directional answer within 3 days. I've learned to calibrate effort to decision stakes: for a $10M launch decision, the 3-week rigorous analysis is justified. For a weekly report, an 80% solution delivered on time is better than a 100% solution delivered late. I now explicitly ask 'what decision does this inform and when?' before starting any analysis, and I time-box exploratory work to prevent scope creep. The key insight: the value of an analysis is zero if it arrives after the decision is already made."
+
+### Question 8: "How Do You Handle Feedback You Disagree With?"
+
+**Technical framing: methodology disagreement resolved with data.**
+
+"When my manager suggested we use a simpler metric (accuracy) instead of the composite Safety-Adjusted Engagement metric I'd proposed, I initially disagreed because accuracy obscures the safety-engagement tradeoff. Rather than arguing abstractly, I ran a retrospective analysis on 5 past experiments: with accuracy as the decision metric, 2 of the 5 would have shipped changes that later caused safety regressions. With SAE, both would have been caught. I presented this empirical comparison, and the manager agreed to pilot SAE alongside accuracy for the next quarter. By the end of the quarter, SAE had caught one additional safety regression that accuracy missed. The feedback taught me that adoption requires demonstration, not argumentation."
+
+### Question 9: "Tell Me About a Time You Worked Under Ambiguity"
+
+**Use Story 12: Navigated Ambiguous Requirements with Phased Rollout.**
+
+Key points: leadership said "reduce bad content" with no target, no timeline, no metric definition. Response: (1) quantified the baseline (6 violation categories, 30 days of data), (2) identified highest-leverage categories (spam + hate speech = 68% of violating impressions), (3) proposed phased rollout with explicit success criteria per phase, (4) delivered measurable results within 4 weeks. The approach transformed ambiguity into actionable structure through data.
+
+### Question 10: "Where Do You See Yourself in 5 Years?"
+
+"Leading a DS function that sets the analytical standards for safety measurement — defining how experiments are designed, how causal claims are validated, and how safety metrics are computed across the organization. Specifically, I want to build three things: (1) an experimentation platform that makes it trivial for any team to run rigorous safety experiments with built-in guardrails, (2) a causal inference toolkit that provides off-the-shelf implementations of DID, RDD, synthetic control calibrated for safety use cases, and (3) a metrics governance framework that ensures consistency and accuracy across markets. The goal is to make safety measurement a competitive advantage — so that TikTok's safety metrics are the most trustworthy in the industry."
+
+### 11.4 Questions to Ask HRBP
+
+**1. "What does the onboarding process look like for someone transitioning from a different DS domain?"**
+Shows self-awareness about the domain transition and eagerness to ramp up quickly.
+
+**2. "How does the team handle the emotional toll of content moderation work? Are there support structures?"**
+Demonstrates empathy and awareness that safety work involves exposure to harmful content.
+
+**3. "What does 'Always Day 1' look like in practice on this team?"**
+References ByteDance values directly, shows cultural awareness.
+
+**4. "How do DS team members typically grow from senior to staff level? What differentiates them?"**
+Shows long-term thinking and career investment.
+
 ---
 
-## Section 8: Questions to Ask
+## Section 13: Questions to Ask
+
+Organized by round. Ask 2-3 per round, tailored to the interviewer.
+
+### For Round 1 (Peer DS)
 
 ### Team & Metrics
 
@@ -1619,7 +2441,32 @@ This shows you understand that safety DS is not a 9-to-5 role. The answer sets e
 
 ---
 
-## Appendix: Key Formulas Quick Reference
+### For Round 2 (HM)
+
+**11. "When you evaluate an experiment and the primary metric is neutral but a guardrail is borderline, how do you make the call?"**
+This shows you think about the full decision framework, not just statistical significance.
+
+**12. "What's the most surprising finding from a recent analysis that changed a product or policy decision?"**
+This reveals the team's analytical culture — do analyses actually influence decisions?
+
+### For Round 3 (Skip-Level)
+
+**13. "What are the team's biggest measurement gaps right now?"**
+Identifies where you can add immediate value and shows analytical thinking.
+
+**14. "How does the team balance proactive analysis (identifying opportunities) vs reactive analysis (answering ad-hoc requests)?"**
+Shows you care about analytical leverage and time allocation.
+
+**15. "What's the relationship between the DS team in the US and the counterpart team in Beijing? How do you share methods and learnings?"**
+Shows awareness of the global organization structure and collaboration model.
+
+### For Round 4 (HRBP)
+
+→ See Section 11.4 for HRBP-specific questions.
+
+---
+
+## Appendix A: Key Formulas Quick Reference
 
 | Concept | Formula | When to Use |
 |---|---|---|
@@ -1639,4 +2486,70 @@ This shows you understand that safety DS is not a 9-to-5 role. The answer sets e
 
 ---
 
-*Last updated: 2026-02-28. Prepared for TikTok Integrity & Safety DS interview. Every answer optimized for technical depth per HM feedback.*
+## Appendix B: Python Quick Reference
+
+```python
+# Statistical testing
+from scipy import stats
+stats.ttest_ind(a, b, equal_var=False)    # Welch's t-test
+stats.chi2_contingency(table)              # Chi-squared test
+stats.mannwhitneyu(a, b)                   # Non-parametric
+stats.shapiro(data)                        # Normality test
+stats.kstest(data, 'norm')                 # KS test
+
+# Sample size / Power
+from statsmodels.stats.power import TTestIndPower
+power = TTestIndPower()
+n = power.solve_power(effect_size=0.2, alpha=0.05, power=0.8)
+
+# Bootstrap
+from scipy.stats import bootstrap
+res = bootstrap((data,), np.mean, n_resamples=10000, confidence_level=0.95)
+
+# Multiple testing
+from statsmodels.stats.multitest import multipletests
+reject, pvals_corrected, _, _ = multipletests(pvals, method='fdr_bh')
+
+# Causal inference
+import statsmodels.formula.api as smf
+# DID
+model = smf.ols('y ~ treated * post', data=df).fit(cov_type='HC3')
+# IV/2SLS
+from linearmodels.iv import IV2SLS
+iv_model = IV2SLS.from_formula('y ~ 1 + [d ~ z]', data=df).fit()
+
+# XGBoost
+import xgboost as xgb
+model = xgb.XGBClassifier(
+    max_depth=5, learning_rate=0.1, n_estimators=500,
+    subsample=0.8, colsample_bytree=0.8,
+    scale_pos_weight=999,  # for imbalanced data
+    eval_metric='aucpr', early_stopping_rounds=50
+)
+model.fit(X_train, y_train, eval_set=[(X_val, y_val)])
+```
+
+---
+
+## Appendix C: TikTok Business Cheat Sheet
+
+| Dimension | Detail |
+|-----------|--------|
+| **Users** | 1.5B+ MAU globally |
+| **Content volume** | Billions of items daily (video, LIVE, comments, DMs) |
+| **Languages** | 40+ languages requiring classifier coverage |
+| **Revenue model** | Advertising (primary), TikTok Shop (e-commerce commission), LIVE gifting (50% platform cut) |
+| **Content moderation** | Automated classifiers (first pass) + human review (edge cases + appeals) |
+| **Key safety metrics** | VVR (Violating View Rate), FPR, Time-to-Action, Appeal Overturn Rate |
+| **Experimentation** | Internal platform for A/B testing; challenges include network effects, low base rates, ethical constraints |
+| **Regulatory** | EU DSA (transparency + risk assessments), US KOSA (minor safety), various national laws |
+| **Key competitors** | YouTube Shorts, Instagram Reels, Snapchat Spotlight |
+| **Safety differentiator** | Brand safety is key for advertiser spend; stronger safety → higher CPM rates |
+| **Douyin vs TikTok** | Douyin: more mature e-commerce, mini-programs, China-specific regulations. TikTok: global, more advertising-focused |
+| **LIVE ecosystem** | Creators stream → viewers watch/gift → platform takes commission → creators cash out diamonds |
+| **E-commerce (TikTok Shop)** | Sellers list products → creators promote via video/LIVE → buyers purchase in-app → platform takes commission |
+| **ByteDance values** | "Always Day 1", "Be Candid and Clear", "Seek Truth and Be Pragmatic", "Be Inclusive and Aim for the Highest" |
+
+---
+
+*Last updated: 2026-03-04. Prepared for TikTok Integrity & Safety DS interview (4-round format). Every answer optimized for technical depth + product sense per HM feedback and insider/recruiter confirmation.*
