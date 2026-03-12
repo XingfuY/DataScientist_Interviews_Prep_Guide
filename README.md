@@ -1,35 +1,38 @@
-# DS Experimentation & Safety Metrics
+# Data Scientist Interviews Prep Guide
 
-A/B testing, causal inference, and safety metrics design for content platform trust & safety. Built around real-world experimentation challenges in content moderation, policy evaluation, and integrity measurement.
+Interview preparation materials for Data Scientist roles across multiple companies. Combines technical reference documents, worked examples, and executable Jupyter notebooks.
 
-## Notebooks
+## Company Prep
+
+### CarMax — Sr. Data Scientist, Pricing Algorithms
+- [`CarMax/00_case_study_battle_card.md`](CarMax/00_case_study_battle_card.md) — Night-before cheat sheet: solved cases, mental math, frameworks
+- [`CarMax/01_behavioral_prep.md`](CarMax/01_behavioral_prep.md) — STAR stories mapped to CarMax 8 competencies
+- [`CarMax/02_business_context.md`](CarMax/02_business_context.md) — Business model, metrics, tech stack, FY2026 priorities
+- [`CarMax/03_technical_deep_dives.md`](CarMax/03_technical_deep_dives.md) — Pricing model design, A/B testing, ML evaluation
+- [`CarMax/04_mock_cases_practice.md`](CarMax/04_mock_cases_practice.md) — 5 timed practice cases with solutions
+
+### TikTok — Integrity & Safety Data Scientist
+- [`interview_prep/tiktok_integrity_safety.md`](interview_prep/tiktok_integrity_safety.md) — 4-round interview guide
+
+## Technical Notebooks
 
 | # | Notebook | Topics |
 |---|----------|--------|
-| 01 | [A/B Testing Foundations](notebooks/01_ab_testing_foundations.ipynb) | Z-tests, t-tests, sample size/power, CUPED variance reduction, sequential testing (O'Brien-Fleming), Thompson sampling bandits, multiple testing corrections |
-| 02 | [Causal Inference Methods](notebooks/02_causal_inference_methods.ipynb) | DID, RDD, IV/2SLS, propensity score matching, IPW, DAGs, parallel trends tests, McCrary density test |
-| 03 | [Safety Metrics Design](notebooks/03_safety_metrics_design.ipynb) | Violation rate, precision/recall curves, time-to-action, recidivism rate, composite scoring, anomaly detection (z-score, EWMA, CUSUM) |
-| 04 | [Experiment Design](notebooks/04_experiment_design.ipynb) | Unit of diversion, cluster randomization, sample size optimization, phased rollouts, SRM checks, novelty effects, full design document |
+| 01 | [A/B Testing Foundations](notebooks/01_ab_testing_foundations.ipynb) | Z-tests, t-tests, sample size/power, CUPED, sequential testing, Thompson sampling, multiple testing |
+| 02 | [Causal Inference Methods](notebooks/02_causal_inference_methods.ipynb) | DID, RDD, IV/2SLS, propensity score matching, IPW, DAGs |
+| 03 | [Safety Metrics Design](notebooks/03_safety_metrics_design.ipynb) | Violation rate, precision/recall, time-to-action, anomaly detection |
+| 04 | [Experiment Design](notebooks/04_experiment_design.ipynb) | Cluster randomization, sample size, phased rollouts, SRM checks |
 
 ## Project Structure
 
 ```
-├── notebooks/              # Jupyter notebooks (run end-to-end)
-├── data/
-│   ├── generators/         # Synthetic data generators
-│   │   ├── content_moderation.py   # Content streams, policy changes, creator cohorts
-│   │   ├── user_behavior.py        # User cohorts, journey panels, network graphs
-│   │   ├── policy_experiments.py   # A/B tests, friction warnings, sequential/multi-arm
-│   │   └── safety_incidents.py     # Time series with anomalies, policy impacts
-│   └── README.md
-├── utils/
-│   ├── statistical_tests.py   # Z-test, t-test, chi², proportion test, CUPED, bootstrap
-│   ├── causal_estimators.py   # DID, RDD, IV, PSM, IPW (from scratch with statsmodels)
-│   ├── metrics_library.py     # Safety metrics, anomaly detection, composite scoring
-│   └── visualization.py       # Matplotlib plotting utilities
-├── interview_prep/
-│   └── tiktok_integrity_safety.md  # Interview preparation guide
-└── requirements.txt
+├── CarMax/                # CarMax Sr. DS Pricing Algorithms prep
+├── interview_prep/        # Company-specific markdown prep guides
+├── notebooks/             # Jupyter notebooks (run end-to-end)
+├── data/generators/       # Synthetic data generators
+├── utils/                 # Reusable analysis modules
+├── context/               # Private reference materials (gitignored)
+└── figures/               # Output plots
 ```
 
 ## Setup
@@ -38,18 +41,11 @@ A/B testing, causal inference, and safety metrics design for content platform tr
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-
-# Run all notebooks
-jupyter nbconvert --execute notebooks/*.ipynb --to notebook
+jupyter notebook
 ```
 
 ## Key Features
 
-- **All synthetic data** — seeded generators produce realistic content safety datasets without any real user data
-- **From-scratch implementations** — statistical tests and causal estimators built with NumPy/SciPy/statsmodels, not black-box libraries
-- **Robustness checks** — parallel trends tests, McCrary density tests, covariate balance checks, placebo tests
-- **Content safety domain** — hate speech, spam, misinformation, coordinated inauthentic behavior scenarios throughout
-
-## Dependencies
-
-NumPy, pandas, SciPy, statsmodels, scikit-learn, matplotlib, seaborn, plotly, networkx, Jupyter
+- **All synthetic data** — seeded generators, no real user data
+- **From-scratch implementations** — statistical tests and causal estimators
+- **Multi-company prep** — reusable frameworks across different DS roles
